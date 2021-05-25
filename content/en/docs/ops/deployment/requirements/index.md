@@ -39,7 +39,7 @@ To be part of a mesh, Kubernetes pods must satisfy the following requirements:
   instance HTTP and TCP.
 
 - **Application UIDs**: Ensure your pods do **not** run applications as a user
-  with the user ID (UID) value of **1337**.
+  with the user ID (UID) value of `1337` because `1337` is reserved for the sidecar proxy.
 
 - **`NET_ADMIN` and `NET_RAW` capabilities**: If [pod security policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/)
     are [enforced](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#enabling-pod-security-policies)
@@ -136,11 +136,6 @@ Because TLS communication is not server first, TLS encrypted server first traffi
 1. Configure `mTLS` mode `DISABLE` for the server. This will disable the TLS sniffing, allowing server first protocols to be used.
 1. Configure all clients to send `TLS` traffic, generally through a [`DestinationRule`](/docs/reference/config/networking/destination-rule/#ClientTLSSettings) or by relying on auto mTLS.
 1. Configure your application to send TLS traffic directly.
-
-## Application Bind Address
-
-When Istio captures inbound traffic, it will redirect it to the `localhost` address. As a result, applications should bind to
-wildcard (`0.0.0.0` for IPv4 or `::` for IPv6). Applications listening on their pod IP will need to be modified.
 
 ## Outbound traffic
 

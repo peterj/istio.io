@@ -1,29 +1,39 @@
 ---
-title: Configuring Gateway Network Topology [Experimental]
-description: How to configure gateway network topology (experimental).
+title: Configuring Gateway Network Topology (Alpha)
+description: How to configure gateway network topology.
 weight: 60
 keywords: [traffic-management,ingress,gateway]
 owner: istio/wg-networking-maintainers
-test: no
+test: yes
 ---
+
+## Forwarding external client attributes (IP address, certificate info) to destination workloads
+
+Many applications require knowing the client IP address and certificate information of the originating request to behave
+properly. Notable cases include logging and audit tools that require the client IP be populated and security tools,
+such as Web Application Firewalls (WAF), that need this information to apply rule sets properly. The ability to
+provide client attributes to services has long been a staple of reverse proxies. To forward these client
+attributes to destination workloads, proxies use the `X-Forwarded-For` (XFF) and `X-Forwarded-Client-Cert` (XFCC) headers.
+
+Today's networks vary widely in nature, but support for these attributes is a requirement no matter what the network topology is.
+This information should be preserved
+and forwarded whether the network uses cloud-based Load Balancers, on-premise Load Balancers, gateways that are
+exposed directly to the internet, gateways that serve many intermediate proxies, and other deployment topologies not
+specified.
+
+While Istio provides an [ingress gateway](/docs/tasks/traffic-management/ingress/ingress-control/), given the varieties
+of architectures mentioned above, reasonable defaults are not able to be shipped that support the proper forwarding of
+client attributes to the destination workloads.
+This becomes ever more vital as Istio multicluster deployment models become more common.
+
+For more information on `X-Forwarded-For`, see the IETF's [RFC](https://tools.ietf.org/html/rfc7239).
 
 ## Configuring network topologies
 
-{{< boilerplate experimental >}}
+Configuration of XFF and XFCC headers can be set globally for all gateway workloads via `MeshConfig` or per gateway using
+a pod annotation. For example, to configure globally during install or upgrade when using an `IstioOperator` custom resource:
 
-Istio provides the ability to manage settings like [X-Forwarded-For](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#x-forwarded-for) (XFF)
-and [X-Forwarded-Client-Cert](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#x-forwarded-client-cert)
-(XFCC), which are dependent on how the gateway workloads are deployed. This is currently an in-development feature. For more
-information on `X-Forwarded-For`, see the IETF's [RFC](https://tools.ietf.org/html/rfc7239).
-
-You might choose to deploy Istio ingress gateways in various network topologies
-(e.g. behind Cloud Load Balancers, a self-managed Load Balancer or directly expose the
-Istio ingress gateway to the Internet). As such, these topologies require different ingress gateway configurations for
-transporting correct client attributes like IP addresses and certificates to the workloads running in the cluster.
-
-Configuration of XFF and XFCC headers can be set globally for all gateway workloads via `MeshConfig` or per gateway using a pod annotation. For example, to configure globally during install or upgrade when using an `IstioOperator` custom resource:
-
-{{< text yaml >}}
+{{< text syntax=yaml snip_id=none >}}
 spec:
   meshConfig:
     defaultConfig:
@@ -35,7 +45,7 @@ spec:
 You can also configure both of these settings by adding the `proxy.istio.io/config` annotation to the Pod spec
 of your Istio ingress gateway.
 
-{{< text yaml >}}
+{{< text syntax=yaml snip_id=none >}}
 ...
   metadata:
     annotations:
@@ -64,7 +74,7 @@ to understand how `X-Forwarded-For` headers and trusted client addresses are det
 
 1. Run the following command to create a file named `topology.yaml` with `numTrustedProxies` set to `2` and install Istio:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=install_num_trusted_proxies_two >}}
     $ cat <<EOF > topology.yaml
     apiVersion: install.istio.io/v1alpha1
     kind: IstioOperator
@@ -83,57 +93,72 @@ to understand how `X-Forwarded-For` headers and trusted client addresses are det
 
 1. Create an `httpbin` namespace:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=create_httpbin_namespace >}}
     $ kubectl create namespace httpbin
     namespace/httpbin created
     {{< /text >}}
 
 1. Set the `istio-injection` label to `enabled` for sidecar injection:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=label_httpbin_namespace >}}
     $ kubectl label --overwrite namespace httpbin istio-injection=enabled
     namespace/httpbin labeled
     {{< /text >}}
 
 1. Deploy `httpbin` in the `httpbin` namespace:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=apply_httpbin >}}
     $ kubectl apply -n httpbin -f samples/httpbin/httpbin.yaml
     {{< /text >}}
 
 1. Deploy a gateway associated with `httpbin`:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=deploy_httpbin_gateway >}}
     $ kubectl apply -n httpbin -f samples/httpbin/httpbin-gateway.yaml
     {{< /text >}}
 
 1. Set a local `GATEWAY_URL` environmental variable based on your Istio ingress gateway's IP address:
 
-    {{< text bash >}}
+    {{< text syntax=bash snip_id=export_gateway_url >}}
     $ export GATEWAY_URL=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
     {{< /text >}}
 
 1. Run the following `curl` command to simulate a request with proxy addresses in the `X-Forwarded-For` header:
 
-    {{< text bash >}}
-    $ curl -H 'X-Forwarded-For: 56.5.6.7, 72.9.5.6, 98.1.2.3' $GATEWAY_URL/get?show_env=true
+    {{< text syntax=bash snip_id=curl_xff_headers >}}
+    $ curl -s -H 'X-Forwarded-For: 56.5.6.7, 72.9.5.6, 98.1.2.3' "$GATEWAY_URL"/get?show_env=true
     {
-      "args": {
-        "show_env": "true"
-      },
+    "args": {
+      "show_env": "true"
+    },
       "headers": {
-        ...
-        "X-Envoy-External-Address": "72.9.5.6",
-        ...
-        "X-Forwarded-For": "56.5.6.7, 72.9.5.6, 98.1.2.3, <YOUR GATEWAY IP>",
-        ...
-      },
-      ...
+      "Accept": ...
+      "Host": ...
+      "User-Agent": ...
+      "X-B3-Parentspanid": ...
+      "X-B3-Sampled": ...
+      "X-B3-Spanid": ...
+      "X-B3-Traceid": ...
+      "X-Envoy-Attempt-Count": ...
+      "X-Envoy-External-Address": "72.9.5.6",
+      "X-Forwarded-Client-Cert": ...
+      "X-Forwarded-For": "56.5.6.7, 72.9.5.6, 98.1.2.3,10.244.0.1",
+      "X-Forwarded-Proto": ...
+      "X-Request-Id": ...
+    },
+      "origin": "56.5.6.7, 72.9.5.6, 98.1.2.3,10.244.0.1",
+      "url": ...
     }
     {{< /text >}}
 
-The above output shows the request headers that the `httpbin` workload received. When the Istio gateway received this request, it set the `X-Envoy-External-Address` header to the second to last (`numTrustedProxies: 2`) address in the `X-Forwarded-For` header from your curl command. Additionally, the gateway appends its own IP to the
-`X-Forwarded-For` header before forwarding it to the httpbin workload.
+{{< tip >}}
+In the above example `$GATEWAY_URL` resolved to 10.244.0.1. This will not be the case in your environment.
+{{< /tip >}}
+
+The above output shows the request headers that the `httpbin` workload received. When the Istio gateway received this
+request, it set the `X-Envoy-External-Address` header to the second to last (`numTrustedProxies: 2`) address in the
+`X-Forwarded-For` header from your curl command. Additionally, the gateway appends its own IP to the `X-Forwarded-For`
+header before forwarding it to the httpbin workload.
 
 ### Configuring X-Forwarded-Client-Cert Headers
 
@@ -148,7 +173,7 @@ sanitize/append/forward the XFCC header before proxying the request.
 
 To configure how XFCC headers are handled, set `forwardClientCertDetails` in your `IstioOperator`
 
-{{< text yaml >}}
+{{< text syntax=yaml snip_id=none >}}
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
@@ -174,11 +199,13 @@ for examples of using this capability.
 
 ## PROXY Protocol
 
+{{< boilerplate experimental >}}
+
 The [PROXY protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) allows for exchanging and preservation of client attributes across multiple proxies without relying on Layer 7 protocols.
 
-If your external load balancer is configured to use the PROXY protocol, the Istio gateway must also be configured accept PROXY protocol. Enabling this requires adding [Envoy Proxy Protocol filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/listener_filters/proxy_protocol) using an `EnvoyFilter` applied on the gateway workload. For example:
+If your external load balancer is configured to use the PROXY protocol, the Istio gateway must also be configured to accept the PROXY protocol. Enabling this requires adding the [Envoy Proxy Protocol filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/listener_filters/proxy_protocol) using an `EnvoyFilter` applied on the gateway workload. For example:
 
-{{< text yaml >}}
+{{< text syntax=yaml snip_id=none >}}
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:

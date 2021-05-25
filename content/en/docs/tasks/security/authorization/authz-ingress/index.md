@@ -1,6 +1,6 @@
 ---
-title: Authorization on Ingress Gateway
-description: How to set up access control on an ingress gateway.
+title: Ingress Gateway
+description: Shows how to set up access control on an ingress gateway.
 weight: 50
 keywords: [security,access-control,rbac,authorization,ingress,ip,allowlist,denylist]
 owner: istio/wg-security-maintainers
@@ -13,7 +13,7 @@ This task shows you how to enforce IP-based access control on an Istio ingress g
 
 Before you begin this task, do the following:
 
-* Read the [Authorization conceptual documentation](/docs/concepts/security/#authorization).
+* Read the [Istio authorization concepts](/docs/concepts/security/#authorization).
 
 * Install Istio using the [Istio installation guide](/docs/setup/install/istioctl/).
 
@@ -279,7 +279,7 @@ EOF
 Find your original client IP address if you don't know it and assign it to a variable:
 
 {{< text bash >}}
-$ CLIENT_IP=$(kubectl get pods -n istio-system -o name -l istio=ingressgateway | sed 's|pod/||' | while read -r pod; do kubectl logs "$pod" -n istio-system | grep remoteIP; done | head -1 | awk -F, '{print $3}' | awk -F: '{print $2}' | sed 's/ //') && echo "$CLIENT_IP"
+$ CLIENT_IP=$(kubectl get pods -n istio-system -o name -l istio=ingressgateway | sed 's|pod/||' | while read -r pod; do kubectl logs "$pod" -n istio-system | grep remoteIP; done | tail -1 | awk -F, '{print $3}' | awk -F: '{print $2}' | sed 's/ //') && echo "$CLIENT_IP"
 192.168.10.15
 {{< /text >}}
 
@@ -309,7 +309,7 @@ EOF
 Find your original client IP address if you don't know it and assign it to a variable:
 
 {{< text bash >}}
-$ CLIENT_IP=$(kubectl get pods -n istio-system -o name -l istio=ingressgateway | sed 's|pod/||' | while read -r pod; do kubectl logs "$pod" -n istio-system | grep remoteIP; done | head -1 | awk -F, '{print $4}' | awk -F: '{print $2}' | sed 's/ //') && echo "$CLIENT_IP"
+$ CLIENT_IP=$(kubectl get pods -n istio-system -o name -l istio=ingressgateway | sed 's|pod/||' | while read -r pod; do kubectl logs "$pod" -n istio-system | grep remoteIP; done | tail -1 | awk -F, '{print $4}' | awk -F: '{print $2}' | sed 's/ //') && echo "$CLIENT_IP"
 192.168.10.15
 {{< /text >}}
 

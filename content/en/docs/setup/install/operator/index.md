@@ -1,7 +1,7 @@
 ---
 title: Istio Operator Install
 description: Instructions to install Istio in a Kubernetes cluster using the Istio operator.
-weight: 25
+weight: 20
 keywords: [kubernetes, operator]
 aliases:
     - /docs/setup/install/standalone-operator
@@ -78,7 +78,6 @@ To install the Istio `demo` [configuration profile](/docs/setup/additional-setup
 using the operator, run the following command:
 
 {{< text bash >}}
-$ kubectl create ns istio-system
 $ kubectl apply -f - <<EOF
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator

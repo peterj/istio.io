@@ -497,88 +497,30 @@ Then, simply bind both `VirtualServices` to it like this:
 - `VirtualService` configuration `vs1` with host `service1.test.com` and gateway `gw`
 - `VirtualService` configuration `vs2` with host `service2.test.com` and gateway `gw`
 
-### Port conflict when configuring multiple TLS hosts in a gateway
+### Configuring SNI routing when not sending SNI
 
-If you apply a `Gateway` configuration that has the same `selector` labels as another
-existing `Gateway`, then if they both expose the same HTTPS port you must ensure that they have
-unique port names. Otherwise, the configuration will be applied without an immediate error indication
-but it will be ignored in the runtime gateway configuration. For example:
+An HTTPS `Gateway` that specifies the `hosts` field will perform an [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication) match on incoming requests.
+For example, the following configuration would only allow requests that match `*.example.com` in the SNI:
 
 {{< text yaml >}}
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: mygateway
-spec:
-  selector:
-    istio: ingressgateway # use istio default ingress gateway
-  servers:
-  - port:
-      number: 443
-      name: https
-      protocol: HTTPS
-    tls:
-      mode: SIMPLE
-      serverCertificate: /etc/istio/ingressgateway-certs/tls.crt
-      privateKey: /etc/istio/ingressgateway-certs/tls.key
-    hosts:
-    - "myhost.com"
----
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: mygateway2
-spec:
-  selector:
-    istio: ingressgateway # use istio default ingress gateway
-  servers:
-  - port:
-      number: 443
-      name: https
-      protocol: HTTPS
-    tls:
-      mode: SIMPLE
-      serverCertificate: /etc/istio/ingressgateway-certs/tls.crt
-      privateKey: /etc/istio/ingressgateway-certs/tls.key
-    hosts:
-    - "myhost2.com"
+servers:
+- port:
+    number: 443
+    name: https
+    protocol: HTTPS
+  hosts:
+  - "*.example.com"
 {{< /text >}}
 
-With this configuration, requests to the second host, `myhost2.com`, will fail because
-both gateway ports have `name: https`.
-A _curl_ request, for example, will produce an error message something like this:
+This may cause certain requests to fail.
 
-{{< text plain >}}
-curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL in connection to myhost2.com:443
-{{< /text >}}
+For example, if you do not have DNS set up and are instead directly setting the host header, such as `curl 1.2.3.4 -H "Host: app.example.com"`, no SNI will be set, causing the request to fail.
+Instead, you can set up DNS or use the `--resolve` flag of `curl`. See the [Secure Gateways](/docs/tasks/traffic-management/ingress/secure-ingress/) task for more information.
 
-You can confirm that this has happened by checking Pilot's logs for a message similar to the following:
+Another common issue is load balancers in front of Istio.
+Most cloud load balancers will not forward the SNI, so if you are terminating TLS in your cloud load balancer you may need to do one of the following:
 
-{{< text bash >}}
-$ kubectl logs -n istio-system $(kubectl get pod -l istio=pilot -n istio-system -o jsonpath={.items..metadata.name}) -c discovery | grep "non unique port"
-2018-09-14T19:02:31.916960Z info    model   skipping server on gateway mygateway2 port https.443.HTTPS: non unique port name for HTTPS port
-{{< /text >}}
+- Configure the cloud load balancer to instead passthrough the TLS connection
+- Disable SNI matching in the `Gateway` by setting the hosts field to `*`
 
-To avoid this problem, ensure that multiple uses of the same `protocol: HTTPS` port are uniquely named.
-For example, change the second one to `https2`:
-
-{{< text yaml >}}
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
-metadata:
-  name: mygateway2
-spec:
-  selector:
-    istio: ingressgateway # use istio default ingress gateway
-  servers:
-  - port:
-      number: 443
-      name: https2
-      protocol: HTTPS
-    tls:
-      mode: SIMPLE
-      serverCertificate: /etc/istio/ingressgateway-certs/tls.crt
-      privateKey: /etc/istio/ingressgateway-certs/tls.key
-    hosts:
-    - "myhost2.com"
-{{< /text >}}
+A common symptom of this is for the load balancer health checks to succeed while real traffic fails.
